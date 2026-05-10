@@ -56,8 +56,12 @@ func (cb *circuitBreaker) Call(
 		return nil, err
 	}
 
-	if err := cb.beforeRequest(); err != nil {
+	beforeNotify, err := cb.beforeRequest()
+	if err != nil {
 		return nil, err
+	}
+	if beforeNotify != nil {
+		beforeNotify()
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -68,7 +72,10 @@ func (cb *circuitBreaker) Call(
 	// Execute outside lock (VERY IMPORTANT)
 	result, err := operation()
 
-	cb.afterRequest(err)
+	afterNotify := cb.afterRequest(err)
+	if afterNotify != nil {
+		afterNotify()
+	}
 
 	return result, err
 }
