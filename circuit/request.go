@@ -3,28 +3,36 @@ package circuitbreaker
 import "time"
 
 // Pre request logic
-func (cb *circuitBreaker) beforeRequest() error {
+func (cb *circuitBreaker) beforeRequest() (func(), error) {
 	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	var notify func()
+
+	// CLOSED STATE: expire stale failures before any request.
+	if cb.state == StateClosed {
+		cb.clearExpiredFailuresLocked()
+	}
 
 	// OPEN STATE
 	if cb.state == StateOpen {
 		if time.Since(cb.openedAt) >= cb.config.Timeout {
-			cb.transitionTo(StateHalfOpen)
+			notify = cb.transitionTo(StateHalfOpen)
 		} else {
-			return ErrCircuitBreakerOpen
+			cb.mu.Unlock()
+			return nil, ErrCircuitBreakerOpen
 		}
 	}
 
 	// HALF-OPEN STATE
 	if cb.state == StateHalfOpen {
 		if cb.halfOpenRequests >= cb.config.MaxRequests {
-			return ErrTooManyRequests
+			cb.mu.Unlock()
+			return nil, ErrTooManyRequests
 		}
 		cb.halfOpenRequests++
 	}
 
-	return nil
+	cb.mu.Unlock()
+	return notify, nil
 }
 
 func (cb *circuitBreaker) clearExpiredFailuresLocked() {
@@ -38,11 +46,12 @@ func (cb *circuitBreaker) clearExpiredFailuresLocked() {
 }
 
 // Post request logic
-func (cb *circuitBreaker) afterRequest(err error) {
+func (cb *circuitBreaker) afterRequest(err error) func() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	cb.metrics.Requests++
+	var notify func()
 
 	if err == nil {
 		cb.metrics.Successes++
@@ -51,9 +60,9 @@ func (cb *circuitBreaker) afterRequest(err error) {
 		if cb.state == StateHalfOpen {
 			// success in half-open → close circuit
 			cb.resetMetrics()
-			cb.transitionTo(StateClosed)
+			notify = cb.transitionTo(StateClosed)
 		}
-		return
+		return notify
 	}
 
 	if cb.state == StateClosed {
@@ -66,13 +75,15 @@ func (cb *circuitBreaker) afterRequest(err error) {
 	cb.metrics.LastFailureTime = time.Now()
 
 	if cb.state == StateHalfOpen {
-		cb.transitionTo(StateOpen)
-		return
+		notify = cb.transitionTo(StateOpen)
+		return notify
 	}
 
 	if cb.state == StateClosed {
 		if cb.config.ReadyToTrip(cb.metrics) {
-			cb.transitionTo(StateOpen)
+			notify = cb.transitionTo(StateOpen)
 		}
 	}
+
+	return notify
 }
