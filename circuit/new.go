@@ -36,6 +36,10 @@ func (cb *circuitBreaker) Call(
 		return nil, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Execute outside lock (VERY IMPORTANT)
 	result, err := operation()
 
