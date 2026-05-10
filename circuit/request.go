@@ -27,6 +27,16 @@ func (cb *circuitBreaker) beforeRequest() error {
 	return nil
 }
 
+func (cb *circuitBreaker) clearExpiredFailuresLocked() {
+	if cb.config.Interval <= 0 || cb.metrics.LastFailureTime.IsZero() {
+		return
+	}
+
+	if time.Since(cb.metrics.LastFailureTime) > cb.config.Interval {
+		cb.metrics.ConsecutiveFailures = 0
+	}
+}
+
 // Post request logic
 func (cb *circuitBreaker) afterRequest(err error) {
 	cb.mu.Lock()
@@ -45,6 +55,11 @@ func (cb *circuitBreaker) afterRequest(err error) {
 		}
 		return
 	}
+
+	if cb.state == StateClosed {
+		cb.clearExpiredFailuresLocked()
+	}
+
 	// Failure
 	cb.metrics.Failures++
 	cb.metrics.ConsecutiveFailures++
