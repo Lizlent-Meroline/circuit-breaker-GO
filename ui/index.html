@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Circuit Breaker UI</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+
+      body {
+        font-family: Inter, system-ui, sans-serif;
+        margin: 0; padding: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+      }
+
+      .app {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+
+      /* ── Header ── */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .header h1 { margin: 0; font-size: 1.5rem; color: #f8fafc; }
+      .header p  { margin: 4px 0 0; font-size: 0.85rem; color: #94a3b8; }
+
+      /* ── State badge ── */
+      .state-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 18px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+        transition: background 0.3s, color 0.3s;
+      }
+      .badge .dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        animation: pulse 1.4s infinite;
+      }
+      .badge.CLOSED  { background: #14532d; color: #86efac; }
+      .badge.CLOSED .dot  { background: #4ade80; }
+      .badge.OPEN    { background: #450a0a; color: #fca5a5; }
+      .badge.OPEN .dot    { background: #f87171; }
+      .badge.HALF-OPEN { background: #451a03; color: #fcd34d; }
+      .badge.HALF-OPEN .dot { background: #fbbf24; }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%       { opacity: 0.5; transform: scale(1.3); }
+      }
+
+      /* ── Grid ── */
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        margin-bottom: 16px;
+      }
+
+      /* ── Cards ── */
+      .card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 14px;
+        padding: 20px;
+      }
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748b;
+      }
+
+      /* ── Metric rows ── */
+      .metric-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+      }
+      .metric-row .label { color: #94a3b8; }
+      .metric-row .value { font-weight: 700; font-size: 1.1rem; color: #f1f5f9; }
+
+      /* ── Bar ── */
+      .bar-wrap {
+        background: #0f172a;
+        border-radius: 6px;
+        height: 8px;
+        overflow: hidden;
+        margin-top: 4px;
+      }
+      .bar-fill {
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.4s ease;
+      }
+      .bar-fill.success { background: #4ade80; }
+      .bar-fill.failure { background: #f87171; }
+
+      /* ── Buttons ── */
+      .button-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+      button {
+        border: none;
+        padding: 10px 16px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: transform 0.1s ease, opacity 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      button:hover:not(:disabled) { transform: translateY(-1px); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.success { background: #16a34a; color: #fff; }
+      button.danger  { background: #dc2626; color: #fff; }
+      button.neutral { background: #334155; color: #e2e8f0; }
+      button.reset   { background: #7c3aed; color: #fff; }
+      button.force   { background: #0369a1; color: #fff; }
+
+      /* ── Burst controls ── */
+      .burst-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .burst-row label { font-size: 0.85rem; color: #94a3b8; }
+      .burst-row input[type=range] {
+        accent-color: #6366f1;
+        width: 100px;
+      }
+      .burst-row span { font-size: 0.85rem; font-weight: 700; color: #a5b4fc; min-width: 20px; }
+
+      /* ── Toggle ── */
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+      .toggle {
+        position: relative;
+        width: 40px; height: 22px;
+        cursor: pointer;
+      }
+      .toggle input { opacity: 0; width: 0; height: 0; }
+      .slider {
+        position: absolute;
+        inset: 0;
+        background: #334155;
+        border-radius: 999px;
+        transition: background 0.2s;
+      }
+      .slider::before {
+        content: '';
+        position: absolute;
+        width: 16px; height: 16px;
+        left: 3px; top: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+      }
+      .toggle input:checked + .slider { background: #6366f1; }
+      .toggle input:checked + .slider::before { transform: translateX(18px); }
+
+      /* ── Log ── */
+      .log-wrap {
+        max-height: 260px;
+        overflow-y: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: 0.78rem;
+        background: #020617;
+        border-radius: 10px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .log-wrap::-webkit-scrollbar { width: 6px; }
+      .log-wrap::-webkit-scrollbar-track { background: transparent; }
+      .log-wrap::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+      .log-entry {
+        display: flex;
+        gap: 10px;
+        padding: 5px 8px;
+        border-radius: 6px;
+        background: #0f172a;
+        align-items: flex-start;
+      }
+      .log-entry .ts   { color: #475569; white-space: nowrap; flex-shrink: 0; }
+      .log-entry .msg  { color: #cbd5e1; flex: 1; word-break: break-all; }
+      .log-entry.ok    { border-left: 3px solid #4ade80; }
+      .log-entry.err   { border-left: 3px solid #f87171; }
+      .log-entry.state { border-left: 3px solid #fbbf24; }
+      .log-entry.info  { border-left: 3px solid #60a5fa; }
+
+      /* ── Spinner ── */
+      .spinner {
+        width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        display: inline-block;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* ── State timeline ── */
+      .timeline {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .timeline-dot {
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .timeline-dot.CLOSED   { background: #4ade80; }
+      .timeline-dot.OPEN     { background: #f87171; }
+      .timeline-dot.HALF-OPEN { background: #fbbf24; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef, useCallback } = React;
+
+      const MAX_LOG = 80;
+
+      function ts() {
+        return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+
+      function App() {
+        const [status, setStatus]       = useState({ state: 'CLOSED', metrics: {} });
+        const [log, setLog]             = useState([]);
+        const [isLoading, setIsLoading] = useState(false);
+        const [polling, setPolling]     = useState(true);
+        const [burstN, setBurstN]       = useState(5);
+        const [stateHistory, setStateHistory] = useState(['CLOSED']);
+        const logEndRef = useRef(null);
+        const prevState = useRef('CLOSED');
+
+        const pushLog = useCallback((entry) => {
+          setLog(prev => {
+            const next = [...prev, entry];
+            return next.length > MAX_LOG ? next.slice(next.length - MAX_LOG) : next;
+          });
+        }, []);
+
+        const applyStatus = useCallback((data, source) => {
+          setStatus({ state: data.state, metrics: data.metrics });
+          if (data.state !== prevState.current) {
+            pushLog({ kind: 'state', msg: `State changed: ${prevState.current} → ${data.state}`, ts: ts() });
+            setStateHistory(h => [...h.slice(-29), data.state]);
+            prevState.current = data.state;
+          }
+        }, [pushLog]);
+
+        // polling
+        useEffect(() => {
+          if (!polling) return;
+          const id = setInterval(async () => {
+            try {
+              const res  = await fetch('/status');
+              const data = await res.json();
+              applyStatus(data, 'poll');
+            } catch (e) {
+              pushLog({ kind: 'err', msg: `Poll error: ${e.message}`, ts: ts() });
+            }
+          }, 1000);
+          return () => clearInterval(id);
+        }, [polling, applyStatus, pushLog]);
+
+        // auto-scroll log
+        useEffect(() => {
+          logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, [log]);
+
+        async function callMode(mode) {
+          setIsLoading(true);
+          try {
+            const res  = await fetch(`/call?mode=${mode}`, { method: 'POST' });
+            const data = await res.json();
+            applyStatus(data, 'call');
+            if (data.error) {
+              pushLog({ kind: 'err', msg: `[${mode}] ${data.error}`, ts: ts() });
+            } else {
+              pushLog({ kind: 'ok',  msg: `[${mode}] ${data.result}`, ts: ts() });
+            }
+          } catch (e) {
+            pushLog({ kind: 'err', msg: `Network error: ${e.message}`, ts: ts() });
+          } finally {
+            setIsLoading(false);
+          }
+        }
+
+        async function burst(mode) {
+          setIsLoading(true);
+          pushLog({ kind: 'info', msg: `Burst: ${burstN}× ${mode} calls`, ts: ts() });
+          for (let i = 0; i < burstN; i++) {
+            try {
+              const res  = await fetch(`/call?mode=${mode}`, { method: 'POST' });
+              const data = await res.json();
+              applyStatus(data, 'burst');
+              if (data.error) {
+                pushLog({ kind: 'err', msg: `[burst ${i+1}/${burstN}] ${data.error}`, ts: ts() });
+              } else {
+                pushLog({ kind: 'ok',  msg: `[burst ${i+1}/${burstN}] ${data.result}`, ts: ts() });
+              }
+            } catch (e) {
+              pushLog({ kind: 'err', msg: `[burst ${i+1}/${burstN}] ${e.message}`, ts: ts() });
+            }
+          }
+          setIsLoading(false);
+        }
+
+        async function reset() {
+          try {
+            const res = await fetch('/reset', { method: 'POST' });
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              throw new Error(`Server returned ${res.status} (not JSON) — is the server running the latest build?`);
+            }
+            const data = await res.json();
+            applyStatus(data, 'reset');
+            prevState.current = data.state;
+            setStateHistory(['CLOSED']);
+            pushLog({ kind: 'info', msg: 'Circuit breaker reset', ts: ts() });
+          } catch (e) {
+            pushLog({ kind: 'err', msg: `Reset error: ${e.message}`, ts: ts() });
+          }
+        }
+
+        async function setBreaker(state) {
+          try {
+            const res = await fetch(`/forcestate?state=${state}`, { method: 'POST' });
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              throw new Error(`Server returned ${res.status} (not JSON) — is the server running the latest build?`);
+            }
+            const data = await res.json();
+            applyStatus(data, 'set');
+            prevState.current = data.state;
+            pushLog({ kind: 'state', msg: `State set → ${state}`, ts: ts() });
+          } catch (e) {
+            pushLog({ kind: 'err', msg: `Set state error: ${e.message}`, ts: ts() });
+          }
+        }
+
+        const m = status.metrics;
+        const total    = (m.requests  ?? 0);
+        const succPct  = total > 0 ? Math.round((m.successes ?? 0) / total * 100) : 0;
+        const failPct  = total > 0 ? Math.round((m.failures  ?? 0) / total * 100) : 0;
+
+        return (
+          <div className="app">
+            {/* Header */}
+            <div className="header">
+              <div>
+                <h1>Circuit Breaker Dashboard</h1>
+                <p>Live view of breaker state, metrics, and call simulation</p>
+              </div>
+              <div className="state-wrap">
+                <div className={`badge ${status.state}`}>
+                  <span className="dot" />
+                  {status.state}
+                </div>
+                <button className="reset" onClick={reset} disabled={isLoading}>↺ Reset</button>
+              </div>
+            </div>
+
+            {/* Metrics + Controls */}
+            <div className="grid">
+              {/* Metrics */}
+              <div className="card">
+                <h2>Metrics</h2>
+                <div className="metric-row">
+                  <span className="label">Total requests</span>
+                  <span className="value">{m.requests ?? 0}</span>
+                </div>
+                <div className="metric-row">
+                  <span className="label">Successes</span>
+                  <span className="value" style={{color:'#4ade80'}}>{m.successes ?? 0}</span>
+                </div>
+                <div className="bar-wrap"><div className="bar-fill success" style={{width: `${succPct}%`}} /></div>
+
+                <div className="metric-row" style={{marginTop:'10px'}}>
+                  <span className="label">Failures</span>
+                  <span className="value" style={{color:'#f87171'}}>{m.failures ?? 0}</span>
+                </div>
+                <div className="bar-wrap"><div className="bar-fill failure" style={{width: `${failPct}%`}} /></div>
+
+                <div className="metric-row" style={{marginTop:'10px'}}>
+                  <span className="label">Consecutive failures</span>
+                  <span className="value" style={{color: (m.consecutiveFailures ?? 0) >= 3 ? '#f87171' : '#f1f5f9'}}>
+                    {m.consecutiveFailures ?? 0}
+                  </span>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="card">
+                <h2>Single call</h2>
+                <div className="button-row">
+                  <button className="success" onClick={() => callMode('success')} disabled={isLoading}>
+                    {isLoading ? <span className="spinner"/> : '✓'} Success
+                  </button>
+                  <button className="danger" onClick={() => callMode('fail')} disabled={isLoading}>
+                    {isLoading ? <span className="spinner"/> : '✗'} Fail
+                  </button>
+                </div>
+
+                <h2 style={{marginTop:'16px'}}>Burst</h2>
+                <div className="burst-row">
+                  <label>Count</label>
+                  <input type="range" min="1" max="20" value={burstN}
+                    onChange={e => setBurstN(Number(e.target.value))} />
+                  <span>{burstN}</span>
+                </div>
+                <div className="button-row" style={{marginTop:'10px'}}>
+                  <button className="success" onClick={() => burst('success')} disabled={isLoading}>
+                    ⚡ Burst success
+                  </button>
+                  <button className="danger" onClick={() => burst('fail')} disabled={isLoading}>
+                    ⚡ Burst fail
+                  </button>
+                </div>
+
+                <div className="toggle-row">
+                  <label className="toggle">
+                    <input type="checkbox" checked={polling} onChange={e => setPolling(e.target.checked)} />
+                    <span className="slider" />
+                  </label>
+                  Auto-poll every 1s
+                </div>
+              </div>
+            </div>
+
+            {/* Set state */}
+            <div className="card" style={{marginBottom:'16px'}}>
+              <h2>Set state</h2>
+              <p style={{margin:'0 0 12px', fontSize:'0.85rem', color:'#94a3b8'}}>
+                Override the breaker state directly — bypasses normal trip/recovery logic.
+              </p>
+              <div className="button-row">
+                <button
+                  className="force"
+                  style={{background: status.state === 'CLOSED' ? '#166534' : '#0369a1', opacity: status.state === 'CLOSED' ? 0.5 : 1}}
+                  onClick={() => setBreaker('CLOSED')}
+                  disabled={status.state === 'CLOSED'}
+                  title="Set to CLOSED — circuit allows all requests through"
+                >
+                  🟢 CLOSED
+                </button>
+                <button
+                  className="force"
+                  style={{background: status.state === 'HALF-OPEN' ? '#92400e' : '#0369a1', opacity: status.state === 'HALF-OPEN' ? 0.5 : 1}}
+                  onClick={() => setBreaker('HALF-OPEN')}
+                  disabled={status.state === 'HALF-OPEN'}
+                  title="Set to HALF-OPEN — circuit probes with limited requests"
+                >
+                  🟡 HALF-OPEN
+                </button>
+                <button
+                  className="force"
+                  style={{background: status.state === 'OPEN' ? '#7f1d1d' : '#0369a1', opacity: status.state === 'OPEN' ? 0.5 : 1}}
+                  onClick={() => setBreaker('OPEN')}
+                  disabled={status.state === 'OPEN'}
+                  title="Set to OPEN — circuit rejects all requests immediately"
+                >
+                  🔴 OPEN
+                </button>
+              </div>
+            </div>
+
+            {/* State history */}
+            <div className="card" style={{marginBottom:'16px'}}>
+              <h2>State history (last {stateHistory.length})</h2>
+              <div className="timeline">
+                {stateHistory.map((s, i) => (
+                  <div key={i} className={`timeline-dot ${s}`} title={s} />
+                ))}
+              </div>
+            </div>
+
+            {/* Event log */}
+            <div className="card">
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                <h2 style={{margin:0}}>Event log</h2>
+                <button className="neutral" style={{padding:'5px 12px', fontSize:'0.78rem'}}
+                  onClick={() => setLog([])}>Clear</button>
+              </div>
+              <div className="log-wrap">
+                {log.length === 0 && (
+                  <div style={{color:'#475569', fontStyle:'italic', padding:'4px'}}>No events yet…</div>
+                )}
+                {log.map((e, i) => (
+                  <div key={i} className={`log-entry ${e.kind}`}>
+                    <span className="ts">{e.ts}</span>
+                    <span className="msg">{e.msg}</span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>
