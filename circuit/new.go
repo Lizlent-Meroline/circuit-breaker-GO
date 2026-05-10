@@ -1,8 +1,19 @@
 package circuitbreaker
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 func NewCircuitBreaker(config Config) CircuitBreaker {
+	if config.MaxRequests == 0 {
+		config.MaxRequests = 1
+	}
+
+	if config.Timeout <= 0 {
+		config.Timeout = 60 * time.Second
+	}
+
 	if config.ReadyToTrip == nil {
 		config.ReadyToTrip = func(m Metrics) bool {
 			return m.ConsecutiveFailures >= 5
@@ -27,16 +38,30 @@ func (cb *circuitBreaker) GetMetrics() Metrics {
 	return cb.metrics
 }
 
+func (cb *circuitBreaker) cancelHalfOpenRequest() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	if cb.state == StateHalfOpen && cb.halfOpenRequests > 0 {
+		cb.halfOpenRequests--
+	}
+}
+
 func (cb *circuitBreaker) Call(
 	ctx context.Context,
 	operation func() (interface{}, error),
 ) (interface{}, error) {
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if err := cb.beforeRequest(); err != nil {
 		return nil, err
 	}
 
 	if err := ctx.Err(); err != nil {
+		cb.cancelHalfOpenRequest()
 		return nil, err
 	}
 
