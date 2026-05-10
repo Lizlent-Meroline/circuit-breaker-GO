@@ -37,3 +37,13 @@ func (cb *circuitBreaker) resetMetrics() {
 	cb.metrics = Metrics{}
 	cb.halfOpenRequests = 0
 }
+
+// ForceState overrides the current state immediately, firing OnStateChange if set.
+func (cb *circuitBreaker) ForceState(s State) {
+	cb.mu.Lock()
+	notify := cb.transitionTo(s)
+	cb.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
+}

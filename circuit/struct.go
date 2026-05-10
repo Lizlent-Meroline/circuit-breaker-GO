@@ -63,6 +63,7 @@ type CircuitBreaker interface {
 	Call(ctx context.Context, operation func() (interface{}, error)) (interface{}, error)
 	GetState() State
 	GetMetrics() Metrics
+	ForceState(s State)
 }
 
 type circuitBreaker struct {
