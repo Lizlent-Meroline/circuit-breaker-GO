@@ -1,10 +1,11 @@
 package circuitbreaker
 
 import "time"
-//Transition
-func (cb *circuitBreaker) transitionTo(newState State) {
+
+// Transition
+func (cb *circuitBreaker) transitionTo(newState State) func() {
 	if cb.state == newState {
-		return
+		return nil
 	}
 
 	old := cb.state
@@ -20,8 +21,15 @@ func (cb *circuitBreaker) transitionTo(newState State) {
 	}
 
 	if cb.config.OnStateChange != nil {
-		cb.config.OnStateChange("circuit-breaker", old, newState)
+		name := "circuit-breaker"
+		from := old
+		to := newState
+		return func() {
+			cb.config.OnStateChange(name, from, to)
+		}
 	}
+
+	return nil
 }
 
 // Reset metrics
