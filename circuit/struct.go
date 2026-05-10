@@ -3,6 +3,7 @@ package circuitbreaker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -13,6 +14,28 @@ var (
 )
 
 type State int
+
+func (s State) String() string {
+	switch s {
+	case StateClosed:
+		return "CLOSED"
+	case StateOpen:
+		return "OPEN"
+	case StateHalfOpen:
+		return "HALF-OPEN"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func (m Metrics) String() string {
+	return fmt.Sprintf("{Requests:%d Successes:%d Failures:%d ConsecutiveFailures:%d LastFailureTime:%v}",
+		m.Requests,
+		m.Successes,
+		m.Failures,
+		m.ConsecutiveFailures,
+		m.LastFailureTime)
+}
 
 const (
 	StateClosed State = iota
