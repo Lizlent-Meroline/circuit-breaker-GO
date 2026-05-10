@@ -1,6 +1,7 @@
 package circuitbreaker
 
 import "time"
+
 // Pre request logic
 func (cb *circuitBreaker) beforeRequest() error {
 	cb.mu.Lock()
@@ -8,7 +9,7 @@ func (cb *circuitBreaker) beforeRequest() error {
 
 	// OPEN STATE
 	if cb.state == StateOpen {
-		if time.Since(cb.openedAt) > cb.config.Timeout {
+		if time.Since(cb.openedAt) >= cb.config.Timeout {
 			cb.transitionTo(StateHalfOpen)
 		} else {
 			return ErrCircuitBreakerOpen
